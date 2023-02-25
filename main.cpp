@@ -10,15 +10,18 @@
 #include <random>
 
 std::random_device rd; // obtain a random number from hardware
-    std::mt19937 gen(rd()); // seed the generator
-    std::uniform_real_distribution<> distr(-1, 1); // define the range
+std::mt19937 gen(rd()); // seed the generator
+std::uniform_real_distribution<> distr(-1, 1); // define the range
 
+std::ifstream infile_train( "MNIST_CSV/mnist_train.csv" );
+std::string token;
 
 const int MAX_DIM = 784;
 
 double weights[4][MAX_DIM][MAX_DIM];
 double gradientW[4][MAX_DIM][MAX_DIM];
 double gradientB[4][MAX_DIM];
+
 static int numOfTrainedRecords = 0;
 
 class Neuron {
@@ -311,6 +314,7 @@ int trainAndBackpropagation(NeuralNetwork& nn, std::vector <double> recordData) 
     return 0;
 }
 
+std::vector <double> recordData;
 int main() {
     std::vector<int> sizes = {784, 100, 50, 10};
     
@@ -318,10 +322,6 @@ int main() {
     NeuralNetwork nn(sizes);    
     nn.initializeWeights();
     nn.initializeBias();
-
-    std::ifstream infile_train( "MNIST_CSV/mnist_train.csv" );
-    std::vector <double> recordData;
-    std::string token;
 
       while (infile_train)
       {
