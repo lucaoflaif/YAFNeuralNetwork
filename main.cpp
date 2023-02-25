@@ -19,6 +19,7 @@ const int MAX_DIM = 784;
 double weights[4][MAX_DIM][MAX_DIM];
 double gradientW[4][MAX_DIM][MAX_DIM];
 double gradientB[4][MAX_DIM];
+static int numOfTrainedRecords = 0;
 
 class Neuron {
     public:
@@ -245,61 +246,35 @@ class NeuralNetwork {
 };
 
 
-std::vector<std::vector<double>> getDataset() {
-    std::vector<std::vector<double>> dataset;
-    std::ifstream infile( "MNIST_CSV/mnist_train.csv" );
-    std::vector <double> record;
-    std::string token;
+int trainAndBackpropagation(NeuralNetwork& nn, std::vector <double> recordData) {
 
-      while (infile)
-      {
-        std::string s;
-        getline(infile, s , '\n');    
-
-        std::stringstream ss(s);
-        while (getline(ss, token, ',')) {
-          record.push_back(stod(token)/255);
-        }
-        //use record (it's a vector with all parsed integers)
-        dataset.push_back(record);
-        record.clear();
-      }
-    return dataset;
-}
-
-int main() {
-
-    std::vector<int> sizes = {784, 100, 50, 10};
-    std::vector<double> expectedOutputs;
-    for (int i = 0; i < 10; i++) expectedOutputs.push_back(0);
     
-    NeuralNetwork nn(sizes);    
-    nn.initializeWeights();
-    nn.initializeBias();
 
-    std::vector<std::vector<double>> dataset = getDataset();
+    //create and intiialize the expected outputs vector
+    std::vector<double> expectedOutputs;
 
-    int numImages = 0;
-    for (auto image_data : dataset) {
-        if (image_data.empty()) break;    
-
-        //create outputs
-        int outputNumberValue = image_data.front()*255;
-        outputNumberValue == 0 ? expectedOutputs[0] = 1 : expectedOutputs[outputNumberValue] = 1;
+        //we calculate the expected output number of the data line wich is in the first position then we create outputs
+        int outputNumberValue = recordData.front()*255;
+        for (int i = 0; i < 10; i++) {
+            i == outputNumberValue ? expectedOutputs.push_back(1) : expectedOutputs.push_back(0);
+        }
         
         //delete first record (it's the output)
-        image_data.erase(image_data.begin());
+        recordData.erase(recordData.begin());
 
         //so now the record vector is the input vector
-        std::vector<double> inputValues = image_data;
+        //std::vector<double> inputValues = recordData;
 
-        nn.setInputLayerNodeValues(inputValues);
+        //feed the neural network with inputs and propagate forward
+        nn.setInputLayerNodeValues(recordData);
         nn.calculateActivationValues();
 
         std::vector<double> nodeValuesOutput = nn.nodeValuesOutputLayer(expectedOutputs);
         nn.calculateGradientW(3, nodeValuesOutput);
+
         //clear expected outputs
-        outputNumberValue == 0 ? expectedOutputs[0] = 0 : expectedOutputs[outputNumberValue] = 0;
+        expectedOutputs.clear();
+        //outputNumberValue == 0 ? expectedOutputs[0] = 0 : expectedOutputs[outputNumberValue] = 0;
     
         std::vector<double> nodeValuesNextLayer;
 
@@ -307,87 +282,61 @@ int main() {
 
         nn.calculateGradientB(3,nodeValuesOutput);
 
-        int j = sizes.size()-2;
+        int j = nn.layers.size()-2;
         while (j > 0) {
+            //backpropagation: we calculate the node values of the current layer with 
+            //the node values of the next layer, then we calculate the gradient of weights and biases
+
             std::vector<double> nodeValuesCurrentLayer = nn.nodeValuesHiddenLayer(j, nodeValuesNextLayer);
             nodeValuesNextLayer.clear();
             nn.calculateGradientW(j, nodeValuesCurrentLayer);
             nn.calculateGradientB(j, nodeValuesCurrentLayer);
 
             std::copy(nodeValuesCurrentLayer.begin(), nodeValuesCurrentLayer.end(), std::back_inserter(nodeValuesNextLayer));
-            //std::vector<double> nodeValuesNextLayer = nodeValuesCurrentLayer;
             j--;
             nodeValuesCurrentLayer.clear();
         }
 
-        numImages++;
-        if (numImages == 10) {
+        numOfTrainedRecords++;
+        if (numOfTrainedRecords == 10) {
+            //if the batch size limit is met we can update our weights, biases and clear the gradients
+            // for a new set of inputs
+        
             nn.updateAllGradients();
             nn.resetAllGradients();
-
-            int predict = nn.Classify(inputValues);
-            printf("input: %d, predicted %d\n", outputNumberValue, predict);
-            //if (outputNumberValue == predict) printf("ok");
-
-            numImages = 0;
+            numOfTrainedRecords = 0;
 
         }
-    }
 
     return 0;
 }
 
-/*
-int main () {
+int main() {
+    std::vector<int> sizes = {784, 100, 50, 10};
+    
+    //initialize the neural network
+    NeuralNetwork nn(sizes);    
+    nn.initializeWeights();
+    nn.initializeBias();
 
-    std::vector<int> sizes = {2, 2, 1};
+    std::ifstream infile_train( "MNIST_CSV/mnist_train.csv" );
+    std::vector <double> recordData;
+    std::string token;
 
-    weights[0][0][0] = 0.3;
-    weights[0][0][1] = -0.4;
-    weights[0][1][0] = 0.2;
-    weights[0][1][1] = -0.5;
-    weights[1][0][0] = 0.1;
-    weights[1][1][0] = 0.2;
+      while (infile_train)
+      {
+        //read the line until newline char is met
+        std::string s;
+        getline(infile_train, s , '\n');    
 
-    NeuralNetwork nn(sizes);
-
-    std::vector<std::vector<double>> dataset {{0,0,0},{1,0,1},{1,1,0},{0,1,1}};
-
-    for (auto& data : dataset) {
-
-        double output = data.front();
-        data.erase(data.begin());
-
-        std::vector<double> nodeValuesNextLayer;
-        nn.setInputLayerNodeValues(data);
-        nn.calculateActivationValues();
-        std::vector<double> expectedOutputs = {output};
-        std::vector<double> nodeValuesOutput = nn.nodeValuesOutputLayer(expectedOutputs);
+        //parse the single line creating a vector containing the training data
+        std::stringstream ss(s);
+        while (getline(ss, token, ',')) recordData.push_back(stod(token)/255);
         
+        if (recordData.empty()) break;  
 
-        nn.calculateGradientB(2, nodeValuesOutput);
-        nn.calculateGradientW(2, nodeValuesOutput);
-
-        nn.updateAllGradients();
-        nn.resetAllGradients();
-
-        nodeValuesNextLayer = nodeValuesOutput;
-
-        int j = sizes.size()-2;
-        while (j > 0) {
-            std::vector<double> nodeValuesCurrentLayer = nn.nodeValuesHiddenLayer(j, nodeValuesNextLayer);
-            nn.calculateGradientW(j, nodeValuesCurrentLayer);
-            nn.calculateGradientB(j, nodeValuesCurrentLayer);
-            nn.updateAllGradients();
-            nn.resetAllGradients();
-            nodeValuesNextLayer = nodeValuesCurrentLayer;
-            j--;
-        }
-    }
-
-    printf("%d \n", nn.Classify( {0,1}));
-    printf("%d \n", nn.Classify( {1,1}));
-    printf("%d \n", nn.Classify( {1,0}));
-
-    return 0;
-}*/
+        //the record is ready to be fed into the nn
+        trainAndBackpropagation(nn, recordData);
+        recordData.clear();
+      }
+}
