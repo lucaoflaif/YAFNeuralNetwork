@@ -13,9 +13,6 @@ std::random_device rd; // obtain a random number from hardware
 std::mt19937 gen(rd()); // seed the generator
 std::uniform_real_distribution<> distr(-1, 1); // define the range
 
-std::ifstream infile_train( "MNIST_CSV/mnist_train.csv" );
-std::string token;
-
 const int MAX_DIM = 784;
 
 double weights[4][MAX_DIM][MAX_DIM];
@@ -23,6 +20,7 @@ double gradientW[4][MAX_DIM][MAX_DIM];
 double gradientB[4][MAX_DIM];
 
 static int numOfTrainedRecords = 0;
+static int numOfTrainedBatches = 0;
 
 class Neuron {
     public:
@@ -50,7 +48,14 @@ class NeuralNetwork {
     public:
         std::vector<Layer> layers;
         
-
+        NeuralNetwork(std::vector<int> sizes) {
+            printf("inside");
+            for (int i = 0; i < sizes.size()-1; i++) {
+                layers.push_back(Layer(sizes[i], sizes[i+1]));
+            }
+            //add the last layer
+            layers.push_back(Layer(sizes.back(), 0));
+        }
 
         void initializeWeights() {
             //weights[layer][indx neuron of current layer][index neuron of next layer]
@@ -58,7 +63,6 @@ class NeuralNetwork {
                 for (int j = 0; j < MAX_DIM; j++) {
                     for (int k = 0; k < MAX_DIM; k++) {
                         weights[i][j][k] = distr(gen);
-                        //printf("weight");
                     }
                 }
             }
@@ -78,17 +82,8 @@ class NeuralNetwork {
         }
 
         double activationFunctionDerivative(double input) {
-            //sigmoid
+            //sigmoid derivative
             return activationFunction(input) * (1 - activationFunction(input));
-        }
-
-        NeuralNetwork(std::vector<int> sizes) {
-            printf("inside");
-            for (int i = 0; i < sizes.size()-1; i++) {
-                layers.push_back(Layer(sizes[i], sizes[i+1]));
-            }
-            //add the last layer
-            layers.push_back(Layer(sizes.back(), 0));
         }
 
         void setInputLayerNodeValues(std::vector<double> inputValues) {
@@ -124,9 +119,11 @@ class NeuralNetwork {
     }
 
         std::vector<double> nodeValuesOutputLayer(std::vector<double> expectedOutputs) {
-            Layer& outputLayer = layers.back();
-            std::vector<double> nodeValues;
             int layersSize = layers.size();
+            
+            std::vector<double> nodeValues;
+
+            Layer& outputLayer = layers.back();
             Layer& prevLayer = layers[layersSize - 2];
 
             int i = 0;
@@ -183,7 +180,7 @@ class NeuralNetwork {
             for (auto& currentLayerNeuron : currentLayer.neurons) {
                 for (auto& prevLayerNeuron : prevLayer.neurons) {
                     
-                    gradientW[currentLayerIndex-1][prevLayerNeuronIndex][currentLayerNeuronIndex] += (CurrentLayerNodeValues[currentLayerNeuronIndex] * prevLayerNeuron.activationValue)*0.1;
+                    gradientW[currentLayerIndex-1][prevLayerNeuronIndex][currentLayerNeuronIndex] += (CurrentLayerNodeValues[currentLayerNeuronIndex] * prevLayerNeuron.activationValue)*(0.1);
 
                     prevLayerNeuronIndex++;
                 }
@@ -200,12 +197,10 @@ class NeuralNetwork {
         }
 
         void updateAllGradients(){
-            //printf("%f", gradientW[0][0][1]);
             for (int i = 0; i < 4; i++) {
                 for (int j = 0; j < MAX_DIM; j++) {
                     for (int k = 0; k < MAX_DIM; k++) {
                         weights[i][j][k] -= gradientW[i][j][k]*0.5;
-                        //printf("w");
                     }
                 }
             }
@@ -228,7 +223,6 @@ class NeuralNetwork {
 
             for (int i = 0; i < layers.size(); i++) {
                 for (int k = 0; k < layers[i].neurons.size(); k++) {
-                    //layers[i].neurons[k].bias = 0;
                     gradientB[i][k] = 0;
                 }
             }
@@ -249,12 +243,9 @@ class NeuralNetwork {
 };
 
 
-int trainAndBackpropagation(NeuralNetwork& nn, std::vector <double> recordData) {
-
-    
-
+int trainAndBackpropagation(NeuralNetwork& nn, std::vector <double> recordData, int BATCH_SIZE) {
     //create and intiialize the expected outputs vector
-    std::vector<double> expectedOutputs;
+        std::vector<double> expectedOutputs;
 
         //we calculate the expected output number of the data line wich is in the first position then we create outputs
         int outputNumberValue = recordData.front()*255;
@@ -301,7 +292,7 @@ int trainAndBackpropagation(NeuralNetwork& nn, std::vector <double> recordData) 
         }
 
         numOfTrainedRecords++;
-        if (numOfTrainedRecords == 10) {
+        if (numOfTrainedRecords == BATCH_SIZE) {
             //if the batch size limit is met we can update our weights, biases and clear the gradients
             // for a new set of inputs
         
@@ -309,19 +300,18 @@ int trainAndBackpropagation(NeuralNetwork& nn, std::vector <double> recordData) 
             nn.resetAllGradients();
             numOfTrainedRecords = 0;
 
+            numOfTrainedBatches++;
+            printf("Trained batches: %d of %d\n", numOfTrainedBatches, (60000/10));
         }
 
     return 0;
 }
 
-std::vector <double> recordData;
-int main() {
-    std::vector<int> sizes = {784, 100, 50, 10};
-    
-    //initialize the neural network
-    NeuralNetwork nn(sizes);    
-    nn.initializeWeights();
-    nn.initializeBias();
+void startTraining(NeuralNetwork nn, int BATCH_SIZE) {
+    std::vector <double> recordData;
+
+    std::ifstream infile_train( "MNIST_CSV/mnist_train.csv" );
+    std::string token;
 
       while (infile_train)
       {
@@ -336,7 +326,63 @@ int main() {
         if (recordData.empty()) break;  
 
         //the record is ready to be fed into the nn
-        trainAndBackpropagation(nn, recordData);
+        trainAndBackpropagation(nn, recordData, BATCH_SIZE);
         recordData.clear();
       }
+}
+
+void startPredicting(NeuralNetwork nn) {
+    std::vector <double> recordData;
+    std::vector<double> inputValues;
+
+    std::ifstream infile_train( "MNIST_CSV/mnist_test.csv" );
+    std::string token;
+
+    int numOfClassifiedInputs = 0;
+    int numOfCorrectlyClassifiedInputs = 0;
+
+    while (infile_train)
+      {
+        //read the line until newline char is met
+        std::string s;
+        getline(infile_train, s , '\n');    
+
+        //parse the single line creating a vector containing the training data
+        std::stringstream ss(s);
+        while (getline(ss, token, ',')) recordData.push_back(stod(token)/255);
+
+        const int outputValue = recordData.front()*255;
+
+        for (int i = 1; i < recordData.size(); i++) {
+            inputValues.push_back(recordData[i]);
+        }
+        
+        if (recordData.empty()) break;  
+
+        //the record is ready to be fed into the nn
+        int predictedOutput = nn.Classify(inputValues);
+
+        numOfClassifiedInputs++;
+        if (predictedOutput == outputValue) numOfCorrectlyClassifiedInputs++;
+
+        double accuracy = (double)numOfCorrectlyClassifiedInputs/numOfClassifiedInputs;
+
+        if (numOfCorrectlyClassifiedInputs != 0) printf("Correct prediction: %f%\n", accuracy*100);
+
+        recordData.clear();
+        inputValues.clear();
+      }
+}
+
+int main() {
+    std::vector<int> sizes = {784, 100, 50, 10};
+    const int BATCH_SIZE = 10;
+    
+    //initialize the neural network
+    NeuralNetwork nn(sizes);    
+    nn.initializeWeights();
+    nn.initializeBias();
+
+    startTraining(nn, BATCH_SIZE);
+    startPredicting(nn);
 }
