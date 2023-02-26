@@ -47,6 +47,7 @@ class Layer {
 
 class NeuralNetwork {
     public:
+        const double BATCH_SIZE = 10.0;
         std::vector<Layer> layers;
         
         NeuralNetwork(std::vector<int> sizes) {
@@ -171,7 +172,6 @@ class NeuralNetwork {
         }
 
         void calculateGradientW(int currentLayerIndex, std::vector<double> CurrentLayerNodeValues) {
-
             //in this case nextLayer is output layer
             Layer& prevLayer = layers[currentLayerIndex-1];
             Layer& currentLayer = layers[currentLayerIndex];
@@ -182,7 +182,7 @@ class NeuralNetwork {
             for (auto& currentLayerNeuron : currentLayer.neurons) {
                 for (auto& prevLayerNeuron : prevLayer.neurons) {
                     
-                    gradientW[currentLayerIndex-1][prevLayerNeuronIndex][currentLayerNeuronIndex] += (CurrentLayerNodeValues[currentLayerNeuronIndex] * prevLayerNeuron.activationValue)*(0.1);
+                    gradientW[currentLayerIndex-1][prevLayerNeuronIndex][currentLayerNeuronIndex] += (CurrentLayerNodeValues[currentLayerNeuronIndex] * prevLayerNeuron.activationValue)*(1/BATCH_SIZE);
 
                     prevLayerNeuronIndex++;
                 }
@@ -194,7 +194,7 @@ class NeuralNetwork {
 
         void calculateGradientB(int currentLayerIndex, std::vector<double> nodeValues) {
             for (int i = 0; i < layers[currentLayerIndex].neurons.size(); i++) {
-                gradientB[currentLayerIndex][i] += nodeValues[i]*0.1;
+                gradientB[currentLayerIndex][i] += nodeValues[i]*(1/BATCH_SIZE);
             }        
         }
 
@@ -252,10 +252,52 @@ class NeuralNetwork {
             int maxValueIndex = std::distance(outputNeuronsValues.begin(),std::max_element(outputNeuronsValues.begin(), outputNeuronsValues.end()));
             return maxValueIndex;
         }
+
+        void dumpWeights(std::string namefile) {
+            std::ofstream outfile;
+
+            outfile.open(namefile);
+
+            for (int i = 0; i < layers.size()-1; i++) {
+            //for each layer
+            Layer& currentLayer = layers[i];
+            Layer& nextLayer = layers[i+1];
+                for (int j = 0; j < currentLayer.neurons.size(); j++) {
+                    //for each neuron in layer
+                    for (int k = 0; k < nextLayer.neurons.size(); k++) {
+                        //for each neuron of the next layer
+                        outfile << weights[i][j][k] << std::endl;
+                    }
+                }
+           }
+
+        }
+
+        void loadWeights(std::string namefile) {
+            std::ifstream intfile;
+            std::string weight;
+
+            intfile.open(namefile);
+
+            for (int i = 0; i < layers.size()-1; i++) {
+            //for each layer
+            Layer& currentLayer = layers[i];
+            Layer& nextLayer = layers[i+1];
+                for (int j = 0; j < currentLayer.neurons.size(); j++) {
+                    //for each neuron in layer
+                    for (int k = 0; k < nextLayer.neurons.size(); k++) {
+                        //for each neuron of the next layer
+                        getline(intfile, weight, '\n');
+                        weights[i][j][k] = stod(weight);
+                    }
+                }
+           }
+
+        }
 };
 
 
-int trainAndBackpropagation(NeuralNetwork& nn, std::vector <double> recordData, int BATCH_SIZE) {
+int trainAndBackpropagation(NeuralNetwork& nn, std::vector <double> recordData) {
     //create and intiialize the expected outputs vector
         std::vector<double> expectedOutputs;
         expectedOutputs.reserve(10);
@@ -307,7 +349,7 @@ int trainAndBackpropagation(NeuralNetwork& nn, std::vector <double> recordData, 
         }
 
         numOfTrainedRecords++;
-        if (numOfTrainedRecords == BATCH_SIZE) {
+        if (numOfTrainedRecords == nn.BATCH_SIZE) {
             //if the batch size limit is met we can update our weights, biases and clear the gradients
             // for a new set of inputs
         
@@ -316,13 +358,13 @@ int trainAndBackpropagation(NeuralNetwork& nn, std::vector <double> recordData, 
             numOfTrainedRecords = 0;
 
             numOfTrainedBatches++;
-            printf("Trained batches: %d of %d\n", numOfTrainedBatches, (60000/10));
+            //printf("Trained batches: %d of %f\n", numOfTrainedBatches, (60000/nn.BATCH_SIZE));
         }
 
     return 0;
 }
 
-void startTraining(NeuralNetwork nn, int BATCH_SIZE) {
+void startTraining(NeuralNetwork nn) {
     std::vector <double> recordData;
     recordData.reserve(785);
 
@@ -342,7 +384,7 @@ void startTraining(NeuralNetwork nn, int BATCH_SIZE) {
         if (recordData.empty()) break;  
 
         //the record is ready to be fed into the nn
-        trainAndBackpropagation(nn, recordData, BATCH_SIZE);
+        trainAndBackpropagation(nn, recordData);
         recordData.clear();
       }
       printf("End training");
@@ -359,7 +401,6 @@ void startPredicting(NeuralNetwork nn) {
 
     int numOfClassifiedInputs = 0;
     int numOfCorrectlyClassifiedInputs = 0;
-    double accuracy;
 
     while (infile_train)
       {
@@ -385,24 +426,25 @@ void startPredicting(NeuralNetwork nn) {
         numOfClassifiedInputs++;
         if (predictedOutput == outputValue) numOfCorrectlyClassifiedInputs++;
 
-        double accuracy = (double)numOfCorrectlyClassifiedInputs/numOfClassifiedInputs;
-
-        if (numOfCorrectlyClassifiedInputs != 0) printf("Correct prediction: %f%\n", accuracy*100);
+        //if (numOfCorrectlyClassifiedInputs != 0) printf("Correct prediction: %f%\n", accuracy*100);
 
         recordData.clear();
         inputValues.clear();
       }
+      double accuracy = (double)numOfCorrectlyClassifiedInputs/numOfClassifiedInputs;
+      printf("accuracy: %f%%", accuracy*100);
 }
 
 int main() {
-    std::vector<int> sizes = {784, 100, 50, 10};
-    const int BATCH_SIZE = 10;
+    std::vector<int> sizes = {784, 200, 100, 10};
     
     //initialize the neural network
     NeuralNetwork nn(sizes);    
     nn.initializeWeights();
     nn.initializeBias();
 
-    startTraining(nn, BATCH_SIZE);
+    //startTraining(nn);
+    //nn.dumpWeights("weights2.txt"); // 
+    nn.loadWeights("weights2.txt"); // w:784 100 50 10   w2:784 200 100 10
     startPredicting(nn);
 }
