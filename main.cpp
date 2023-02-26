@@ -2,6 +2,7 @@
 #include <vector>
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 #include <fstream>
 #include <sstream>
@@ -49,7 +50,6 @@ class NeuralNetwork {
         std::vector<Layer> layers;
         
         NeuralNetwork(std::vector<int> sizes) {
-            printf("inside");
             for (int i = 0; i < sizes.size()-1; i++) {
                 layers.push_back(Layer(sizes[i], sizes[i+1]));
             }
@@ -122,6 +122,7 @@ class NeuralNetwork {
             int layersSize = layers.size();
             
             std::vector<double> nodeValues;
+            nodeValues.reserve(100);
 
             Layer& outputLayer = layers.back();
             Layer& prevLayer = layers[layersSize - 2];
@@ -143,6 +144,7 @@ class NeuralNetwork {
 
         std::vector<double> nodeValuesHiddenLayer(int hiddenLayerIndex, std::vector<double> nextLayerNodeValues) {
             std::vector<double> nodeValues;
+            nodeValues.reserve(100);
 
             Layer currentLayer = layers[hiddenLayerIndex];
             Layer nextLayer = layers[hiddenLayerIndex + 1];
@@ -213,19 +215,8 @@ class NeuralNetwork {
         }
 
         void resetAllGradients() {
-            for (int i = 0; i < 4; i++) {
-                for (int j = 0; j < MAX_DIM; j++) {
-                    for (int k = 0; k < MAX_DIM; k++) {
-                        gradientW[i][j][k] = 0;
-                    }
-                }
-            }
-
-            for (int i = 0; i < layers.size(); i++) {
-                for (int k = 0; k < layers[i].neurons.size(); k++) {
-                    gradientB[i][k] = 0;
-                }
-            }
+           memset(gradientW, 0, sizeof(gradientW));
+           memset(gradientB, 0, sizeof(gradientB));
         }
 
         int Classify(std::vector<double> inputs) {
@@ -246,6 +237,7 @@ class NeuralNetwork {
 int trainAndBackpropagation(NeuralNetwork& nn, std::vector <double> recordData, int BATCH_SIZE) {
     //create and intiialize the expected outputs vector
         std::vector<double> expectedOutputs;
+        expectedOutputs.reserve(10);
 
         //we calculate the expected output number of the data line wich is in the first position then we create outputs
         int outputNumberValue = recordData.front()*255;
@@ -264,6 +256,7 @@ int trainAndBackpropagation(NeuralNetwork& nn, std::vector <double> recordData, 
         nn.calculateActivationValues();
 
         std::vector<double> nodeValuesOutput = nn.nodeValuesOutputLayer(expectedOutputs);
+        nodeValuesOutput.reserve(100); //the node values vector will have the size of the layers, I just allocate the max layers' size for speed
         nn.calculateGradientW(3, nodeValuesOutput);
 
         //clear expected outputs
@@ -271,6 +264,7 @@ int trainAndBackpropagation(NeuralNetwork& nn, std::vector <double> recordData, 
         //outputNumberValue == 0 ? expectedOutputs[0] = 0 : expectedOutputs[outputNumberValue] = 0;
     
         std::vector<double> nodeValuesNextLayer;
+        nodeValuesNextLayer.reserve(100);
 
         std::copy(nodeValuesOutput.begin(), nodeValuesOutput.end(), std::back_inserter(nodeValuesNextLayer));
 
@@ -309,6 +303,7 @@ int trainAndBackpropagation(NeuralNetwork& nn, std::vector <double> recordData, 
 
 void startTraining(NeuralNetwork nn, int BATCH_SIZE) {
     std::vector <double> recordData;
+    recordData.reserve(785);
 
     std::ifstream infile_train( "MNIST_CSV/mnist_train.csv" );
     std::string token;
@@ -329,17 +324,21 @@ void startTraining(NeuralNetwork nn, int BATCH_SIZE) {
         trainAndBackpropagation(nn, recordData, BATCH_SIZE);
         recordData.clear();
       }
+      printf("End training");
 }
 
 void startPredicting(NeuralNetwork nn) {
     std::vector <double> recordData;
+    recordData.reserve(785);
     std::vector<double> inputValues;
+    inputValues.reserve(784);
 
     std::ifstream infile_train( "MNIST_CSV/mnist_test.csv" );
     std::string token;
 
     int numOfClassifiedInputs = 0;
     int numOfCorrectlyClassifiedInputs = 0;
+    double accuracy;
 
     while (infile_train)
       {
