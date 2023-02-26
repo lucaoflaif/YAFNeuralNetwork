@@ -199,13 +199,18 @@ class NeuralNetwork {
         }
 
         void updateAllGradients(){
-            for (int i = 0; i < 4; i++) {
-                for (int j = 0; j < MAX_DIM; j++) {
-                    for (int k = 0; k < MAX_DIM; k++) {
+            for (int i = 0; i < layers.size()-1; i++) {
+            //for each layer
+            Layer& currentLayer = layers[i];
+            Layer& nextLayer = layers[i+1];
+                for (int j = 0; j < currentLayer.neurons.size(); j++) {
+                    //for each neuron in layer
+                    for (int k = 0; k < nextLayer.neurons.size(); k++) {
+                        //for each neuron of the next layer
                         weights[i][j][k] -= gradientW[i][j][k]*0.5;
                     }
                 }
-            }
+           }
 
             for (int i = 0; i < layers.size(); i++) {
                 for (int k = 0; k < layers[i].neurons.size(); k++) {
@@ -215,9 +220,25 @@ class NeuralNetwork {
         }
 
         void resetAllGradients() {
-           memset(gradientW, 0, sizeof(gradientW));
-           memset(gradientB, 0, sizeof(gradientB));
-        }
+           for (int i = 0; i < layers.size()-1; i++) {
+            //for each layer
+            Layer& currentLayer = layers[i];
+            Layer& nextLayer = layers[i+1];
+                for (int j = 0; j < currentLayer.neurons.size(); j++) {
+                    //for each neuron in layer
+                    for (int k = 0; k < nextLayer.neurons.size(); k++) {
+                        //for each neuron of the next layer
+                        gradientW[i][j][k] = 0;
+                    }
+                }
+           }
+
+           for (int i = 0; i < layers.size(); i++) {
+                for (int k = 0; k < layers[i].neurons.size(); k++) {
+                    gradientB[i][k] = 0;
+                }
+            }
+         }
 
         int Classify(std::vector<double> inputs) {
             setInputLayerNodeValues(inputs);
